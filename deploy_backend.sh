@@ -1,9 +1,8 @@
 #!/bin/bash
 
-GITHUB_REPO="gouryella/ufw-panel-backend"
+GITHUB_REPO="Gouryella/UFW-Panel"
 GITHUB_API="https://api.github.com/repos/$GITHUB_REPO/releases/latest"
 
-# 安装目录
 INSTALL_DIR="/usr/local/bin"
 EXECUTABLE_NAME="ufw-panel-backend"
 EXECUTABLE_PATH="$INSTALL_DIR/$EXECUTABLE_NAME"
@@ -38,13 +37,10 @@ detect_arch() {
 
 fetch_latest_backend_url() {
     log_info "正在从 GitHub 获取最新版本信息..."
-
     DOWNLOAD_URL=$(curl -s "$GITHUB_API" | grep "browser_download_url" | grep "$ARCH" | grep "$EXECUTABLE_NAME" | cut -d '"' -f 4)
-
     if [ -z "$DOWNLOAD_URL" ]; then
         log_error_exit "未找到架构 $ARCH 的可用版本。"
     fi
-
     BACKEND_URL="$DOWNLOAD_URL"
     log_info "获取到下载链接: $BACKEND_URL"
 }
@@ -74,6 +70,22 @@ prompt_password() {
     log_info "API 访问密码已设置。"
 }
 
+prompt_cors_origin() {
+    while true; do
+        read -p "请输入允许跨域的前端地址 (例如 http://localhost:3000): " origin
+        if [[ -z "$origin" ]]; then
+            echo "[ERROR] 不允许留空，请输入有效的 URL。"
+        elif ! [[ "$origin" =~ ^https?://.+ ]]; then
+            echo "[ERROR] 请输入以 http:// 或 https:// 开头的地址。"
+        else
+            CORS_ALLOWED_ORIGINS="$origin"
+            log_info "CORS 允许来源设置为: $CORS_ALLOWED_ORIGINS"
+            break
+        fi
+    done
+}
+
+
 install_backend() {
     log_info "正在下载后端可执行文件..."
     if ! curl -L --progress-bar "$BACKEND_URL" -o "$EXECUTABLE_PATH"; then
@@ -86,7 +98,8 @@ install_backend() {
 create_env_file() {
     log_info "创建环境变量文件 $ENV_FILE ..."
     printf "PORT=%s\n" "$PORT" > "$ENV_FILE"
-    printf "PASSWORD=%s\n" "$PASSWORD" >> "$ENV_FILE"
+    printf "UFW_API_KEY=%s\n" "$PASSWORD" >> "$ENV_FILE"
+    printf "CORS_ALLOWED_ORIGINS=%s\n" "$CORS_ALLOWED_ORIGINS" >> "$ENV_FILE"
     chmod 600 "$ENV_FILE"
     log_info "环境变量文件创建成功。"
 }
@@ -130,6 +143,7 @@ main() {
     fetch_latest_backend_url
     prompt_port
     prompt_password
+    prompt_cors_origin
     install_backend
     create_env_file
     create_systemd_service
