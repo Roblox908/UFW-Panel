@@ -1,0 +1,15 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ufw_db_data:/app/database
+    env_file:
+      - ./.env
+    restart: unless-stopped
+
+volumes:
+  ufw_db_data:
