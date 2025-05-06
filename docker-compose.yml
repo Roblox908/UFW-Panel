@@ -1,5 +1,5 @@
 services:
-  frontend:
+  ufw-panel-frontend:
     image: gouryella/ufw-panel:latest
     container_name: ufw-panel-frontend
     ports:
