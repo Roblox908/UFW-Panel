@@ -1,4 +1,3 @@
-
 services:
   frontend:
     image: gouryella/ufw-panel:latest
