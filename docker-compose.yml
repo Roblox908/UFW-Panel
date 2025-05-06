@@ -1,14 +1,14 @@
+
 services:
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    image: gouryella/ufw-panel:latest
+    container_name: ufw-panel-frontend
     ports:
-      - "3000:3000"
+      - "30737:3000"
     volumes:
       - ufw_db_data:/app/database
     env_file:
-      - ./.env
+      - .env
     restart: unless-stopped
 
 volumes:
