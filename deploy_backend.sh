@@ -16,8 +16,8 @@ green='\033[0;32m'
 yellow='\033[0;33m'
 plain='\033[0m'
 
-log_info()   { echo -e "${orange}[INFO]${green} $1${plain}"; }
-log_error_exit() { echo -e "${red}[ERROR]${plain} $1" >&2; exit 1; }
+log_info()        { echo -e "${orange}[INFO]${green} $1${plain}"; }
+log_error_exit()  { echo -e "${red}[ERROR]${plain} $1" >&2; exit 1; }
 
 check_root() {
     [[ $(id -u) -eq 0 ]] || log_error_exit "此脚本需要以 root 权限运行。请使用 sudo ./deploy_backend.sh"
@@ -47,20 +47,15 @@ ensure_ufw_installed() {
     else
         log_info "已检测到 UFW。"
     fi
-
     systemctl enable --now ufw
-    systemctl is-active --quiet ufw || \
-        log_error_exit "UFW 服务启动失败，请查看 journalctl -u ufw"
+    systemctl is-active --quiet ufw || log_error_exit "UFW 服务启动失败，请查看 journalctl -u ufw"
     log_info "UFW 服务已启动并设置为开机自启。"
 }
 
 update_ufw_after_rules() {
-    local UFW_AFTER_RULES="/etc/ufw/after.rules"
-    local backup="${UFW_AFTER_RULES}.bak.$(date +%s)"
-    [[ -f $UFW_AFTER_RULES ]] && cp "$UFW_AFTER_RULES" "$backup" && \
-        log_info "已备份原 after.rules 到 $backup"
-
-    cat > "$UFW_AFTER_RULES" <<'EOF'
+    local f="/etc/ufw/after.rules"
+    [[ -f $f ]] && cp "$f" "${f}.bak.$(date +%s)" && log_info "已备份原 after.rules"
+    cat > "$f" <<'EOF'
 *filter
 :ufw-user-forward - [0:0]
 :ufw-docker-logging-deny - [0:0]
@@ -72,24 +67,21 @@ update_ufw_after_rules() {
 -A ufw-docker-logging-deny -j DROP
 COMMIT
 EOF
-    log_info "/etc/ufw/after.rules 已更新。"
-    ufw reload && log_info "UFW 规则已重新加载。"
+    ufw reload && log_info "/etc/ufw/after.rules 已更新并加载。"
 }
 
 fetch_latest_backend_url() {
     log_info "正在从 GitHub 获取最新版本信息..."
-    BACKEND_URL=$(curl -s "$GITHUB_API" | grep '"browser_download_url"' |
-                  grep "$ARCH" | grep "$EXECUTABLE_NAME" | cut -d '"' -f 4)
+    BACKEND_URL=$(curl -s "$GITHUB_API" | grep '"browser_download_url"' | grep "$ARCH" | grep "$EXECUTABLE_NAME" | cut -d '"' -f 4)
     [[ -n $BACKEND_URL ]] || log_error_exit "未找到架构 $ARCH 的可用版本。"
     log_info "下载链接: $BACKEND_URL"
 }
 
 prompt_port() {
-    local default_port=8080
-    read -p "$(echo -e "${yellow}请输入后端服务监听端口 (默认为 $default_port): ${plain}")" port
-    PORT=${port:-$default_port}
-    [[ $PORT =~ ^[0-9]+$ && $PORT -ge 1 && $PORT -le 65535 ]] || \
-        log_error_exit "无效端口: $PORT"
+    local d=8080
+    read -p "$(echo -e "${yellow}请输入后端服务监听端口 (默认为 $d): ${plain}")" p
+    PORT=${p:-$d}
+    [[ $PORT =~ ^[0-9]+$ && $PORT -ge 1 && $PORT -le 65535 ]] || log_error_exit "无效端口: $PORT"
     log_info "后端服务监听端口: $PORT"
 }
 
@@ -117,16 +109,14 @@ prompt_cors_origin() {
     done
 }
 
-install_backend() {
+download_backend() {
     log_info "下载后端可执行文件..."
-    curl -L --progress-bar "$BACKEND_URL" -o "$EXECUTABLE_PATH" ||
-        log_error_exit "下载失败，请检查网络。"
+    curl -L --progress-bar "$BACKEND_URL" -o "$EXECUTABLE_PATH" || log_error_exit "下载失败，请检查网络。"
     chmod +x "$EXECUTABLE_PATH"
     log_info "下载完成并已赋予执行权限。"
 }
 
 create_env_file() {
-    log_info "写入环境变量文件 $ENV_FILE"
     cat > "$ENV_FILE" <<EOF
 PORT=$PORT
 UFW_API_KEY=$PASSWORD
@@ -136,7 +126,6 @@ EOF
 }
 
 create_systemd_service() {
-    log_info "创建 systemd 服务文件 $SERVICE_FILE"
     cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=UFW Panel Backend Service
@@ -158,21 +147,28 @@ enable_and_start_service() {
     systemctl daemon-reload
     systemctl enable --now "$SERVICE_NAME"
     sleep 2
-    systemctl is-active --quiet "$SERVICE_NAME" && \
-        log_info "服务 $SERVICE_NAME 启动成功。" || \
-        log_error_exit "服务启动失败，请查看 journalctl -u $SERVICE_NAME"
+    systemctl is-active --quiet "$SERVICE_NAME" && log_info "服务 $SERVICE_NAME 启动成功。" || log_error_exit "服务启动失败，请查看 journalctl -u $SERVICE_NAME"
 }
 
 main() {
     check_root
     detect_arch
+    if systemctl is-active --quiet "$SERVICE_NAME"; then
+        fetch_latest_backend_url
+        systemctl stop "$SERVICE_NAME"
+        download_backend
+        systemctl start "$SERVICE_NAME"
+        sleep 2
+        systemctl is-active --quiet "$SERVICE_NAME" && log_info "升级完成并已重新启动服务。" || log_error_exit "服务重启失败，请查看 journalctl -u $SERVICE_NAME"
+        exit 0
+    fi
     ensure_ufw_installed
     update_ufw_after_rules
     fetch_latest_backend_url
     prompt_port
     prompt_password
     prompt_cors_origin
-    install_backend
+    download_backend
     create_env_file
     create_systemd_service
     enable_and_start_service
