@@ -20,6 +20,7 @@ import DeleteRuleDialog from './DeleteRuleDialog';
 import AddBackendDialog, { AddBackendFormData } from './AddBackendDialog';
 import DeleteBackendDialog from './DeleteBackendDialog';
 import { BackendConfig } from '@/lib/types';
+import Image from "next/image";
 
 const getInitialBackendId = (): string | null => {
   if (typeof window !== 'undefined' && window.localStorage) {
@@ -582,10 +583,17 @@ export default function UfwControlPanel() {
   return (
     <main className="container mx-auto p-4 space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-        <h1 className="text-2xl font-bold">UFW Panel</h1>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex items-center gap-2">
+          <Image
+            src="/logo-width.png"
+            alt="Logo"
+            width={200}
+            height={100}
+          />
+        </div>
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-between">
           <Select onValueChange={handleBackendChange} value={selectedBackendId || ''}>
-            <SelectTrigger className="w-full sm:w-[250px]">
+            <SelectTrigger className="w-full w-55 sm:w-80">
               <SelectValue placeholder="Select Backend..." />
             </SelectTrigger>
             <SelectContent>
@@ -597,27 +605,29 @@ export default function UfwControlPanel() {
               ))}
             </SelectContent>
           </Select>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => setIsAddBackendDialogOpen(true)}
-            title="Add New Backend"
-          >
-            <PlusCircle className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={triggerRemoveBackend}
-            disabled={!selectedBackendId}
-            title="Remove Selected Backend"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setIsAddBackendDialogOpen(true)}
+              title="Add New Backend"
+            >
+              <PlusCircle className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={triggerRemoveBackend}
+              disabled={!selectedBackendId}
+              title="Remove Selected Backend"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
 
-          <Button variant="outline" size="icon" onClick={handleLogout} disabled={isSubmitting} title="Logout">
-            <LogOut className="h-4 w-4" />
-          </Button>
+            <Button variant="outline" size="icon" onClick={handleLogout} disabled={isSubmitting} title="Logout">
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
 
