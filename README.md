@@ -31,7 +31,7 @@ wget https://raw.githubusercontent.com/Gouryella/UFW-Panel/main/deploy_backend.s
 chmod +x deploy_backend.sh
 
 # Run the script with sudo (it requires root privileges)
-sudo ./deploy_backend.sh
+sudo bash deploy_backend.sh
 ```
 
 During the execution, the script will:
