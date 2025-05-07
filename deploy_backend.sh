@@ -10,12 +10,18 @@ ENV_FILE="$INSTALL_DIR/.env_ufw_backend"
 SERVICE_NAME="ufw-panel-backend"
 SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME.service"
 
+red='\033[0;31m'
+orange='\033[38;5;214m'
+green='\033[0;32m'
+yellow='\033[0;33m'
+plain='\033[0m'
+
 log_info() {
-    echo "[INFO] $1"
+    echo -e "${orange}[INFO]${green} $1${plain}"
 }
 
 log_error_exit() {
-    echo "[ERROR] $1" >&2
+    echo -e "${red}[ERROR]${plain} $1" >&2
     exit 1
 }
 
@@ -29,10 +35,35 @@ detect_arch() {
     ARCH=$(uname -m)
     case "$ARCH" in
         x86_64) ARCH="amd64" ;;
-        aarch64 | arm64) ARCH="arm64" ;;
+        aarch64|arm64) ARCH="arm64" ;;
         *) log_error_exit "不支持的架构: $ARCH" ;;
     esac
     log_info "检测到架构: $ARCH"
+}
+
+ensure_ufw_installed() {
+    if ! command -v ufw >/dev/null 2>&1; then
+        log_info "未检测到 UFW，正在安装..."
+        if command -v apt-get >/dev/null 2>&1; then
+            apt-get update -y && apt-get install -y ufw
+        elif command -v dnf >/dev/null 2>&1; then
+            dnf install -y ufw
+        elif command -v yum >/dev/null 2>&1; then
+            yum install -y ufw
+        else
+            log_error_exit "无法自动安装 UFW，请手动安装后重试。"
+        fi
+    else
+        log_info "已检测到 UFW。"
+    fi
+    log_info "启用并启动 UFW 服务..."
+    systemctl enable ufw
+    systemctl start ufw
+    if systemctl is-active --quiet ufw; then
+        log_info "UFW 服务已启动并设置为开机自启。"
+    else
+        log_error_exit "UFW 服务启动失败，请使用 journalctl -u ufw 查看日志。"
+    fi
 }
 
 fetch_latest_backend_url() {
@@ -47,7 +78,7 @@ fetch_latest_backend_url() {
 
 prompt_port() {
     local default_port=8080
-    read -p "请输入后端服务监听的端口 (默认为 $default_port): " port
+    read -p "$(echo -e "${yellow}请输入后端服务监听的端口 (默认为 $default_port): ${plain}")" port
     PORT=${port:-$default_port}
     if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
         log_error_exit "无效的端口号: $PORT"
@@ -56,12 +87,12 @@ prompt_port() {
 }
 
 prompt_password() {
-    read -s -p "请输入用于访问后端 API 的密码: " password
+    read -s -p "$(echo -e "${yellow}请输入用于访问后端 API 的密码: ${plain}")" password
     echo
     if [ -z "$password" ]; then
         log_error_exit "密码不能为空。"
     fi
-    read -s -p "请再次输入密码进行确认: " password_confirm
+    read -s -p "$(echo -e "${yellow}请再次输入密码进行确认: ${plain}")" password_confirm
     echo
     if [ "$password" != "$password_confirm" ]; then
         log_error_exit "两次输入的密码不匹配。"
@@ -72,11 +103,11 @@ prompt_password() {
 
 prompt_cors_origin() {
     while true; do
-        read -p "请输入允许跨域的前端地址 (例如 http://localhost:3000): " origin
+        read -p "$(echo -e "${yellow}请输入允许跨域的前端地址 (例如 http://localhost:3000): ${plain}")" origin
         if [[ -z "$origin" ]]; then
-            echo "[ERROR] 不允许留空，请输入有效的 URL。"
+            echo -e "${red}[ERROR]${plain} 不允许留空，请输入有效的 URL。"
         elif ! [[ "$origin" =~ ^https?://.+ ]]; then
-            echo "[ERROR] 请输入以 http:// 或 https:// 开头的地址。"
+            echo -e "${red}[ERROR]${plain} 请输入以 http:// 或 https:// 开头的地址。"
         else
             CORS_ALLOWED_ORIGINS="$origin"
             log_info "CORS 允许来源设置为: $CORS_ALLOWED_ORIGINS"
@@ -84,7 +115,6 @@ prompt_cors_origin() {
         fi
     done
 }
-
 
 install_backend() {
     log_info "正在下载后端可执行文件..."
@@ -97,9 +127,11 @@ install_backend() {
 
 create_env_file() {
     log_info "创建环境变量文件 $ENV_FILE ..."
-    printf "PORT=%s\n" "$PORT" > "$ENV_FILE"
-    printf "UFW_API_KEY=%s\n" "$PASSWORD" >> "$ENV_FILE"
-    printf "CORS_ALLOWED_ORIGINS=%s\n" "$CORS_ALLOWED_ORIGINS" >> "$ENV_FILE"
+    {
+        printf "PORT=%s\n" "$PORT"
+        printf "UFW_API_KEY=%s\n" "$PASSWORD"
+        printf "CORS_ALLOWED_ORIGINS=%s\n" "$CORS_ALLOWED_ORIGINS"
+    } > "$ENV_FILE"
     chmod 600 "$ENV_FILE"
     log_info "环境变量文件创建成功。"
 }
@@ -140,6 +172,7 @@ enable_and_start_service() {
 main() {
     check_root
     detect_arch
+    ensure_ufw_installed
     fetch_latest_backend_url
     prompt_port
     prompt_password
@@ -148,7 +181,6 @@ main() {
     create_env_file
     create_systemd_service
     enable_and_start_service
-
     echo
     log_info "✅ 后端部署完成！"
     log_info "服务名称: $SERVICE_NAME"
