@@ -27,7 +27,7 @@ jobs:
 
     - name: Set project name
       id: project_vars
-      run: echo "name=ufw-control-backend" >> $GITHUB_OUTPUT
+      run: echo "name=ufw-panel-backend" >> $GITHUB_OUTPUT
       shell: bash
 
     - name: Build for linux/amd64
