@@ -206,6 +206,42 @@ func main() {
 			c.JSON(http.StatusOK, gin.H{"message": "Deny rule from IP added successfully", "ip_address": req.IPAddress, "port_protocol": req.PortProtocol, "comment": req.Comment})
 		})
 
+		type RouteAllowRuleRequest struct {
+			Protocol string `json:"protocol"` // e.g., tcp, udp
+			FromIP   string `json:"from_ip"`  // Defaults to "any" if empty
+			ToIP     string `json:"to_ip"`    // Defaults to "any" if empty
+			Port     string `json:"port"`     // e.g., 80, 443
+			Comment  string `json:"comment"`
+		}
+
+		authorized.POST("/rules/route/allow", func(c *gin.Context) {
+			var req RouteAllowRuleRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body", "details": err.Error()})
+				return
+			}
+
+			if req.Protocol == "" && req.Port == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request: Protocol or Port must be specified for a route rule."})
+				return
+			}
+
+			err := RouteAllowUFW(req.Protocol, req.FromIP, req.ToIP, req.Port, req.Comment)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add route allow rule", "details": err.Error()})
+				return
+			}
+
+			c.JSON(http.StatusOK, gin.H{
+				"message":  "Route allow rule added successfully",
+				"protocol": req.Protocol,
+				"from_ip":  req.FromIP,
+				"to_ip":    req.ToIP,
+				"port":     req.Port,
+				"comment":  req.Comment,
+			})
+		})
+
 	}
 
 	port := os.Getenv("PORT")

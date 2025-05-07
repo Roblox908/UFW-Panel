@@ -90,7 +90,7 @@ export default function PasswordAuth({ backendUrl, onSuccess, onError, clearErro
           </CardContent>
           <CardFooter className='flex justify-center'>
             <Button type="submit" className="w-50 mt-10" disabled={isLoading}>
-              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Submit"}
+              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Login"}
             </Button>
           </CardFooter>
         </form>

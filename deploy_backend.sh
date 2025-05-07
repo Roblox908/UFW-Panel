@@ -16,27 +16,18 @@ green='\033[0;32m'
 yellow='\033[0;33m'
 plain='\033[0m'
 
-log_info() {
-    echo -e "${orange}[INFO]${green} $1${plain}"
-}
-
-log_error_exit() {
-    echo -e "${red}[ERROR]${plain} $1" >&2
-    exit 1
-}
+log_info()   { echo -e "${orange}[INFO]${green} $1${plain}"; }
+log_error_exit() { echo -e "${red}[ERROR]${plain} $1" >&2; exit 1; }
 
 check_root() {
-    if [ "$(id -u)" -ne 0 ]; then
-        log_error_exit "此脚本需要以 root 权限运行。请使用 sudo ./deploy_backend.sh"
-    fi
+    [[ $(id -u) -eq 0 ]] || log_error_exit "此脚本需要以 root 权限运行。请使用 sudo ./deploy_backend.sh"
 }
 
 detect_arch() {
-    ARCH=$(uname -m)
-    case "$ARCH" in
+    case "$(uname -m)" in
         x86_64) ARCH="amd64" ;;
         aarch64|arm64) ARCH="arm64" ;;
-        *) log_error_exit "不支持的架构: $ARCH" ;;
+        *) log_error_exit "不支持的架构: $(uname -m)" ;;
     esac
     log_info "检测到架构: $ARCH"
 }
@@ -56,89 +47,97 @@ ensure_ufw_installed() {
     else
         log_info "已检测到 UFW。"
     fi
-    log_info "启用并启动 UFW 服务..."
-    systemctl enable ufw
-    systemctl start ufw
-    if systemctl is-active --quiet ufw; then
-        log_info "UFW 服务已启动并设置为开机自启。"
-    else
-        log_error_exit "UFW 服务启动失败，请使用 journalctl -u ufw 查看日志。"
-    fi
+
+    systemctl enable --now ufw
+    systemctl is-active --quiet ufw || \
+        log_error_exit "UFW 服务启动失败，请查看 journalctl -u ufw"
+    log_info "UFW 服务已启动并设置为开机自启。"
+}
+
+update_ufw_after_rules() {
+    local UFW_AFTER_RULES="/etc/ufw/after.rules"
+    local backup="${UFW_AFTER_RULES}.bak.$(date +%s)"
+    [[ -f $UFW_AFTER_RULES ]] && cp "$UFW_AFTER_RULES" "$backup" && \
+        log_info "已备份原 after.rules 到 $backup"
+
+    cat > "$UFW_AFTER_RULES" <<'EOF'
+*filter
+:ufw-user-forward - [0:0]
+:ufw-docker-logging-deny - [0:0]
+:DOCKER-USER - [0:0]
+-A DOCKER-USER -j ufw-user-forward
+-A DOCKER-USER -m iprange --src-range 172.16.0.0-172.37.255.255 -j RETURN
+-A DOCKER-USER -j ufw-docker-logging-deny
+-A ufw-docker-logging-deny -m limit --limit 3/min --limit-burst 10 -j LOG --log-prefix "[UFW DOCKER BLOCK] "
+-A ufw-docker-logging-deny -j DROP
+COMMIT
+EOF
+    log_info "/etc/ufw/after.rules 已更新。"
+    ufw reload && log_info "UFW 规则已重新加载。"
 }
 
 fetch_latest_backend_url() {
     log_info "正在从 GitHub 获取最新版本信息..."
-    DOWNLOAD_URL=$(curl -s "$GITHUB_API" | grep "browser_download_url" | grep "$ARCH" | grep "$EXECUTABLE_NAME" | cut -d '"' -f 4)
-    if [ -z "$DOWNLOAD_URL" ]; then
-        log_error_exit "未找到架构 $ARCH 的可用版本。"
-    fi
-    BACKEND_URL="$DOWNLOAD_URL"
-    log_info "获取到下载链接: $BACKEND_URL"
+    BACKEND_URL=$(curl -s "$GITHUB_API" | grep '"browser_download_url"' |
+                  grep "$ARCH" | grep "$EXECUTABLE_NAME" | cut -d '"' -f 4)
+    [[ -n $BACKEND_URL ]] || log_error_exit "未找到架构 $ARCH 的可用版本。"
+    log_info "下载链接: $BACKEND_URL"
 }
 
 prompt_port() {
     local default_port=8080
-    read -p "$(echo -e "${yellow}请输入后端服务监听的端口 (默认为 $default_port): ${plain}")" port
+    read -p "$(echo -e "${yellow}请输入后端服务监听端口 (默认为 $default_port): ${plain}")" port
     PORT=${port:-$default_port}
-    if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
-        log_error_exit "无效的端口号: $PORT"
-    fi
-    log_info "后端服务将监听端口: $PORT"
+    [[ $PORT =~ ^[0-9]+$ && $PORT -ge 1 && $PORT -le 65535 ]] || \
+        log_error_exit "无效端口: $PORT"
+    log_info "后端服务监听端口: $PORT"
 }
 
 prompt_password() {
-    read -s -p "$(echo -e "${yellow}请输入用于访问后端 API 的密码: ${plain}")" password
-    echo
-    if [ -z "$password" ]; then
-        log_error_exit "密码不能为空。"
-    fi
-    read -s -p "$(echo -e "${yellow}请再次输入密码进行确认: ${plain}")" password_confirm
-    echo
-    if [ "$password" != "$password_confirm" ]; then
-        log_error_exit "两次输入的密码不匹配。"
-    fi
-    PASSWORD=$password
+    read -s -p "$(echo -e "${yellow}请输入用于访问后端 API 的密码: ${plain}")" pwd; echo
+    [[ -n $pwd ]] || log_error_exit "密码不能为空。"
+    read -s -p "$(echo -e "${yellow}请再次输入密码确认: ${plain}")" pwd2; echo
+    [[ $pwd == $pwd2 ]] || log_error_exit "两次输入的密码不匹配。"
+    PASSWORD=$pwd
     log_info "API 访问密码已设置。"
 }
 
 prompt_cors_origin() {
     while true; do
-        read -p "$(echo -e "${yellow}请输入允许跨域的前端地址 (例如 http://localhost:3000): ${plain}")" origin
-        if [[ -z "$origin" ]]; then
-            echo -e "${red}[ERROR]${plain} 不允许留空，请输入有效的 URL。"
-        elif ! [[ "$origin" =~ ^https?://.+ ]]; then
-            echo -e "${red}[ERROR]${plain} 请输入以 http:// 或 https:// 开头的地址。"
+        read -p "$(echo -e "${yellow}请输入允许跨域的前端地址 (如 http://localhost:3000): ${plain}")" ori
+        if [[ -z $ori ]]; then
+            echo -e "${red}[ERROR]${plain} 不允许留空。"
+        elif ! [[ $ori =~ ^https?://.+ ]]; then
+            echo -e "${red}[ERROR]${plain} 需以 http:// 或 https:// 开头。"
         else
-            CORS_ALLOWED_ORIGINS="$origin"
-            log_info "CORS 允许来源设置为: $CORS_ALLOWED_ORIGINS"
+            CORS_ALLOWED_ORIGINS=$ori
+            log_info "CORS 允许来源: $CORS_ALLOWED_ORIGINS"
             break
         fi
     done
 }
 
 install_backend() {
-    log_info "正在下载后端可执行文件..."
-    if ! curl -L --progress-bar "$BACKEND_URL" -o "$EXECUTABLE_PATH"; then
-        log_error_exit "下载失败，请检查网络或链接是否正确。"
-    fi
+    log_info "下载后端可执行文件..."
+    curl -L --progress-bar "$BACKEND_URL" -o "$EXECUTABLE_PATH" ||
+        log_error_exit "下载失败，请检查网络。"
     chmod +x "$EXECUTABLE_PATH"
-    log_info "下载完成，已设置可执行权限。"
+    log_info "下载完成并已赋予执行权限。"
 }
 
 create_env_file() {
-    log_info "创建环境变量文件 $ENV_FILE ..."
-    {
-        printf "PORT=%s\n" "$PORT"
-        printf "UFW_API_KEY=%s\n" "$PASSWORD"
-        printf "CORS_ALLOWED_ORIGINS=%s\n" "$CORS_ALLOWED_ORIGINS"
-    } > "$ENV_FILE"
+    log_info "写入环境变量文件 $ENV_FILE"
+    cat > "$ENV_FILE" <<EOF
+PORT=$PORT
+UFW_API_KEY=$PASSWORD
+CORS_ALLOWED_ORIGINS=$CORS_ALLOWED_ORIGINS
+EOF
     chmod 600 "$ENV_FILE"
-    log_info "环境变量文件创建成功。"
 }
 
 create_systemd_service() {
-    log_info "创建 systemd 服务文件 $SERVICE_FILE ..."
-    cat << EOF > "$SERVICE_FILE"
+    log_info "创建 systemd 服务文件 $SERVICE_FILE"
+    cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=UFW Panel Backend Service
 After=network.target
@@ -148,31 +147,27 @@ WorkingDirectory=$INSTALL_DIR
 EnvironmentFile=$ENV_FILE
 ExecStart=$EXECUTABLE_PATH
 Restart=on-failure
-RestartSec=5s
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
 EOF
-    log_info "服务文件已写入。"
 }
 
 enable_and_start_service() {
-    log_info "重新加载 systemd..."
     systemctl daemon-reload
-    systemctl enable "$SERVICE_NAME"
-    systemctl start "$SERVICE_NAME"
+    systemctl enable --now "$SERVICE_NAME"
     sleep 2
-    if systemctl is-active --quiet "$SERVICE_NAME"; then
-        log_info "服务 $SERVICE_NAME 启动成功。"
-    else
-        log_error_exit "服务启动失败，请使用 sudo journalctl -u $SERVICE_NAME 查看日志。"
-    fi
+    systemctl is-active --quiet "$SERVICE_NAME" && \
+        log_info "服务 $SERVICE_NAME 启动成功。" || \
+        log_error_exit "服务启动失败，请查看 journalctl -u $SERVICE_NAME"
 }
 
 main() {
     check_root
     detect_arch
     ensure_ufw_installed
+    update_ufw_after_rules
     fetch_latest_backend_url
     prompt_port
     prompt_password
@@ -181,6 +176,7 @@ main() {
     create_env_file
     create_systemd_service
     enable_and_start_service
+
     echo
     log_info "✅ 后端部署完成！"
     log_info "服务名称: $SERVICE_NAME"

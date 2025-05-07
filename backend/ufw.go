@@ -262,6 +262,66 @@ func DenyUFWFromIP(ipAddress string, portProto string, comment string) error {
 	return nil
 }
 
+func RouteAllowUFW(protocol, fromIP, toIP, port, comment string) error {
+	if protocol == "" && port == "" { 
+	}
+	if strings.ContainsAny(protocol, ";|&`$<>\\ ") { 
+		return fmt.Errorf("invalid characters in protocol string")
+	}
+	if strings.ContainsAny(fromIP, ";|&`$<>\\ ") {
+		return fmt.Errorf("invalid characters in from IP string")
+	}
+	if strings.ContainsAny(toIP, ";|&`$<>\\ ") {
+		return fmt.Errorf("invalid characters in to IP string")
+	}
+	if strings.ContainsAny(port, ";|&`$<>\\ ") { 
+		return fmt.Errorf("invalid characters in port string")
+	}
+
+
+	args := []string{"ufw", "route", "allow"}
+
+
+	if protocol != "" {
+		args = append(args, "proto", protocol)
+	}
+
+	if fromIP != "" {
+		args = append(args, "from", fromIP)
+	} else {
+		args = append(args, "from", "any")
+	}
+
+	if toIP != "" {
+		args = append(args, "to", toIP)
+	} else {
+		args = append(args, "to", "any")
+	}
+	
+	if port != "" {
+		args = append(args, "port", port)
+	}
+
+	if comment != "" {
+		if strings.ContainsAny(comment, "'\";|&`$<>\\") {
+			return fmt.Errorf("invalid characters in comment string")
+		}
+		args = append(args, "comment", comment)
+	}
+
+	cmd := exec.Command("sudo", args...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to execute ufw command '%s': %w\nStderr: %s", strings.Join(args, " "), err, stderr.String())
+	}
+
+	fmt.Printf("Successfully executed: %s\n", strings.Join(cmd.Args, " "))
+	return nil
+}
+
 func DisableUFW() error {
 	cmd := exec.Command("sudo", "ufw", "disable")
 	var stderr bytes.Buffer

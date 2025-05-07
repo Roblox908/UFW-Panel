@@ -375,29 +375,69 @@ export default function UfwControlPanel() {
         setAddRuleError("At least one IP version (IPv4 or IPv6) must be selected for port rules.");
         return;
       }
-      let ruleToSend = baseRule;
-      if (/^\d+$/.test(baseRule)) {
-        ruleToSend = `${baseRule}/tcp`;
-      } else if (!baseRule.includes('/')) {
-        setAddRuleError("Invalid Port/Protocol format. Use 'port/protocol' (e.g., 80/tcp).");
-        return;
-      }
-      const finalRuleString = ruleToSend;
 
+      const finalRuleString = baseRule; 
 
-      if (formData.portIpv4 && formData.portIpv6) {
-        ruleDescription = `${formData.action} ${finalRuleString} (IPv4 & IPv6)`;
-      } else if (formData.portIpv4) {
-        ruleDescription = `${formData.action} ${finalRuleString} (IPv4 only)`;
+      const isNumericListWithoutProtocol = /^\d+(,\s*\d+)*$/.test(baseRule);
+
+      if (isNumericListWithoutProtocol) {
+        const ports = baseRule.split(',').map(p => p.trim()).filter(p => p);
+        setIsSubmitting(true);
+        try {
+          for (const port of ports) {
+            let singleRuleDescription = '';
+            if (formData.portIpv4 && formData.portIpv6) {
+              singleRuleDescription = `${formData.action} ${port} (IPv4 & IPv6)`;
+            } else if (formData.portIpv4) {
+              singleRuleDescription = `${formData.action} ${port} (IPv4 only)`;
+            } else {
+              singleRuleDescription = `${formData.action} ${port} (IPv6 only)`;
+            }
+            
+            const singlePayload = {
+              rule: port, // Send individual port
+              comment: formData.comment.trim() || undefined,
+            };
+            const apiPath = formData.action === 'allow' ? '/api/rules/allow' : '/api/rules/deny';
+            const response = await fetch(getApiUrl(apiPath), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(singlePayload),
+            });
+            const data = await response.json();
+            if (!response.ok) {
+              throw new Error(data.details || data.error || `HTTP error for port ${port}! status: ${response.status}`);
+            }
+            toast.success(`Rule "${singleRuleDescription}" added successfully!`);
+          }
+          await fetchStatus();
+          setIsAddRuleDialogOpen(false);
+          setAddRuleError(null);
+        } catch (err: any) {
+          console.error(`Failed to add one or more port rules via API route:`, err);
+          const errorMessage = err.message || 'Unknown error while adding port rules.';
+          toast.error(`Add Port Rules: ${errorMessage}`);
+          setAddRuleError(errorMessage);
+        } finally {
+          setIsSubmitting(false);
+        }
+        return; // Exit after handling multi-port submission
       } else {
-        ruleDescription = `${formData.action} ${finalRuleString} (IPv6 only)`;
+        // Handle single port/service, or port list with protocol (e.g., "80,443/tcp")
+        if (formData.portIpv4 && formData.portIpv6) {
+          ruleDescription = `${formData.action} ${finalRuleString} (IPv4 & IPv6)`;
+        } else if (formData.portIpv4) {
+          ruleDescription = `${formData.action} ${finalRuleString} (IPv4 only)`;
+        } else {
+          ruleDescription = `${formData.action} ${finalRuleString} (IPv6 only)`;
+        }
+        relativeApiPath = formData.action === 'allow' ? '/api/rules/allow' : '/api/rules/deny';
+        payload = {
+          rule: finalRuleString,
+          comment: formData.comment.trim() || undefined,
+        };
       }
-      relativeApiPath = formData.action === 'allow' ? '/api/rules/allow' : '/api/rules/deny';
-      payload = {
-        rule: finalRuleString,
-        comment: formData.comment.trim() || undefined,
-      };
-    } else {
+    } else if (formData.type === 'ip') {
       if (!formData.ipAddress.trim()) {
         setAddRuleError("IP Address cannot be empty for IP-based rule.");
         return;
@@ -412,7 +452,27 @@ export default function UfwControlPanel() {
       if (formData.ipPortProto.trim()) {
         ruleDescription += ` to port/proto ${formData.ipPortProto.trim()}`;
       }
+    } else if (formData.type === 'forward') {
+      // Interfaces are removed. Ensure protocol or port is present.
+      if (!formData.protocolForward?.trim() && !formData.portForward?.trim()) {
+        setAddRuleError("Protocol or Port must be specified for a forward rule.");
+        return;
+      }
+      relativeApiPath = '/api/rules/route/allow';
+      payload = {
+        protocol: formData.protocolForward?.trim() || undefined,
+        from_ip: formData.fromIpForward?.trim() || undefined,
+        to_ip: formData.toIpForward?.trim() || undefined,
+        port: formData.portForward?.trim() || undefined,
+        comment: formData.comment.trim() || undefined,
+      };
+      ruleDescription = `Forward`; 
+      if (formData.protocolForward?.trim()) ruleDescription += ` PROTO ${formData.protocolForward.trim()}`;
+      if (formData.fromIpForward?.trim()) ruleDescription += ` FROM ${formData.fromIpForward.trim()}`;
+      if (formData.toIpForward?.trim()) ruleDescription += ` TO ${formData.toIpForward.trim()}`;
+      if (formData.portForward?.trim()) ruleDescription += ` PORT ${formData.portForward.trim()}`;
     }
+
 
     setIsSubmitting(true);
     try {
@@ -521,7 +581,7 @@ export default function UfwControlPanel() {
         ? `Loading UFW Status for ${selectedBackend.name} (${selectedBackend.url})...`
         : `Loading UFW Status for selected backend...`;
       return (
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="min-h-[80vh] flex items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           <span className="ml-2">{loadingText}</span>
         </div>
