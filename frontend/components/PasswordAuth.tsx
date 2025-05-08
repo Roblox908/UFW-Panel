@@ -8,6 +8,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/componen
 import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2 } from 'lucide-react'; 
+import Image from 'next/image';
 
 
 interface PasswordAuthProps {
@@ -28,7 +29,6 @@ export default function PasswordAuth({ backendUrl, onSuccess, onError, clearErro
     setLocalError(null); 
     clearError();
 
-    // Construct the API URL with the backendUrl query parameter
     const apiUrl = new URL('/api/auth', window.location.origin);
     apiUrl.searchParams.append('backendUrl', backendUrl);
 
@@ -61,10 +61,11 @@ export default function PasswordAuth({ backendUrl, onSuccess, onError, clearErro
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen">
+    <div className="flex items-center justify-center min-h-[85vh]">
       <Card className="w-full max-w-sm">
-        <CardHeader className='flex justify-center mb-5'>
-          <CardTitle className='text-xl'>Authentication Required</CardTitle>
+        <CardHeader className='flex flex-col justify-center mb-5 items-center'>
+          <Image src="/favicon.png" alt="Logo" width={80} height={80}/>
+          <CardTitle className='text-xl'>Authentication</CardTitle>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
